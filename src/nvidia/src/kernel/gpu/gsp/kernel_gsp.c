@@ -419,6 +419,14 @@ _kgspRpcSendMessage
 
     NV_CHECK_OK_OR_RETURN(LEVEL_SILENT, _kgspRpcSanityCheck(pGpu, pKernelGsp, pRpc));
 
+    {
+        rpc_message_header_v *pGspTraceHdr = RPC_HDR;
+        NV_PRINTF(LEVEL_ERROR, "GSPTRACE TX func=%u seq=%u len=%u\n",
+                  pGspTraceHdr->function,
+                  pGspTraceHdr->sequence,
+                  pGspTraceHdr->length);
+    }
+
     nvStatus = GspMsgQueueSendCommand(pRpc->pMessageQueueInfo, pGpu);
     if (nvStatus != NV_OK)
     {
@@ -1827,9 +1835,12 @@ _kgspRpcDrainOneEvent
 
     nvStatus = GspMsgQueueReceiveStatus(pRpc->pMessageQueueInfo, pGpu);
 
-    if (nvStatus == NV_OK)
+        if (nvStatus == NV_OK)
     {
         rpc_message_header_v *pMsgHdr = RPC_HDR;
+
+        NV_PRINTF(LEVEL_ERROR, "GSPTRACE EVT func=%u seq=%u len=%u\n",
+                  pMsgHdr->function, pMsgHdr->sequence, pMsgHdr->length);
 
         if (pMsgHdr->function == expectedFunc &&
             pMsgHdr->sequence == expectedSequence)
