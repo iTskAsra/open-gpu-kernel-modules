@@ -420,12 +420,33 @@ _kgspRpcSendMessage
     NV_CHECK_OK_OR_RETURN(LEVEL_SILENT, _kgspRpcSanityCheck(pGpu, pKernelGsp, pRpc));
 
     {
-        rpc_message_header_v *pGspTraceHdr = RPC_HDR;
-        NV_PRINTF(LEVEL_ERROR, "GSPTRACE TX func=%u seq=%u len=%u\n",
-                  pGspTraceHdr->function,
-                  pGspTraceHdr->sequence,
-                  pGspTraceHdr->length);
+    rpc_message_header_v *pGspTraceHdr = RPC_HDR;
+    /* payload starts right after the header — mirrors the builder's own
+       fixed_param_size = sizeof(rpc_message_header_v) + sizeof(struct) */
+    void *pGspTracePayload = (NvU8 *)pGspTraceHdr + sizeof(rpc_message_header_v);
+
+    if (pGspTraceHdr->function == 76)        /* GSP_RM_CONTROL */
+    {
+        rpc_gsp_rm_control_v03_00 *p = (rpc_gsp_rm_control_v03_00 *)pGspTracePayload;
+        NV_PRINTF(LEVEL_ERROR,
+            "GSPTRACE TX func=76 seq=%u len=%u cmd=0x%08x paramsSize=%u hClient=0x%08x hObject=0x%08x\n",
+            pGspTraceHdr->sequence, pGspTraceHdr->length,
+            p->cmd, p->paramsSize, p->hClient, p->hObject);
     }
+    else if (pGspTraceHdr->function == 103)  /* GSP_RM_ALLOC */
+    {
+        rpc_gsp_rm_alloc_v03_00 *p = (rpc_gsp_rm_alloc_v03_00 *)pGspTracePayload;
+        NV_PRINTF(LEVEL_ERROR,
+            "GSPTRACE TX func=103 seq=%u len=%u hClass=0x%08x paramsSize=%u hClient=0x%08x hParent=0x%08x\n",
+            pGspTraceHdr->sequence, pGspTraceHdr->length,
+            p->hClass, p->paramsSize, p->hClient, p->hParent);
+    }
+    else
+    {
+        NV_PRINTF(LEVEL_ERROR, "GSPTRACE TX func=%u seq=%u len=%u\n",
+            pGspTraceHdr->function, pGspTraceHdr->sequence, pGspTraceHdr->length);
+    }
+}
 
     nvStatus = GspMsgQueueSendCommand(pRpc->pMessageQueueInfo, pGpu);
     if (nvStatus != NV_OK)
