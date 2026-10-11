@@ -571,6 +571,7 @@ SRCS += src/kernel/gpu/gsp/arch/turing/kernel_gsp_frts_tu102.c
 SRCS += src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c
 SRCS += src/kernel/gpu/gsp/arch/turing/kernel_gsp_vbios_tu102.c
 SRCS += src/kernel/gpu/gsp/kernel_gsp.c
+SRCS += src/kernel/gpu/gsp/gsp_forge_core.c
 SRCS += src/kernel/gpu/gsp/kernel_gsp_booter.c
 SRCS += src/kernel/gpu/gsp/kernel_gsp_fwsec.c
 SRCS += src/kernel/gpu/gsp/kernel_gsp_trace_rats.c

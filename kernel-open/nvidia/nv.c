@@ -55,6 +55,7 @@
 #include "nv-pat.h"
 #include "nv-dmabuf.h"
 #include "nv-caps-imex.h"
+#include "nv-gsp-forge.h"   /* RESEARCH: GSP RPC forger debugfs interface */
 
 /*
  * Commit aefb2f2e619b ("x86/bugs: Rename CONFIG_RETPOLINE =>
@@ -1004,6 +1005,10 @@ static int __init nvidia_init_module(void)
 
     __nv_init_sp = sp;
 
+    /* RESEARCH: bring up the GSP RPC forger debugfs interface. Last on the
+     * success path, so no init error path has created the debugfs dir. */
+    nv_gsp_forge_init();
+
     return 0;
 
 partial_chrdev_exit:
@@ -1044,6 +1049,9 @@ procfs_exit:
 static void __exit nvidia_exit_module(void)
 {
     nvidia_stack_t *sp = __nv_init_sp;
+
+    /* RESEARCH: tear down the GSP RPC forger debugfs interface first. */
+    nv_gsp_forge_exit();
 
     nv_unregister_chrdev(NV_MINOR_DEVICE_NUMBER_CONTROL_DEVICE, 1,
         &nv_linux_control_device_cdev);

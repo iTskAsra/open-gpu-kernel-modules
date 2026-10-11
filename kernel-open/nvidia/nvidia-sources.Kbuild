@@ -60,3 +60,4 @@ NVIDIA_SOURCES += nvidia/nvlink_caps.c
 NVIDIA_SOURCES += nvidia/linux_nvswitch.c
 NVIDIA_SOURCES += nvidia/procfs_nvswitch.c
 NVIDIA_SOURCES += nvidia/i2c_nvswitch.c
+NVIDIA_SOURCES += nvidia/nvidia-gsp-forge.c
