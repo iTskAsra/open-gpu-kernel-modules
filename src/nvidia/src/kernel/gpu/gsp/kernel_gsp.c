@@ -421,9 +421,11 @@ _kgspRpcSendMessage
 
     {
     rpc_message_header_v *pGspTraceHdr = RPC_HDR;
-    /* payload starts right after the header — mirrors the builder's own
-       fixed_param_size = sizeof(rpc_message_header_v) + sizeof(struct) */
-    void *pGspTracePayload = (NvU8 *)pGspTraceHdr + sizeof(rpc_message_header_v);
+    void       *pGspTracePayload = (NvU8 *)pGspTraceHdr + sizeof(rpc_message_header_v);
+    const NvU8 *pGspTraceData    = NULL;   /* inner params to dump */
+    NvU32       gspTraceDataLen  = 0;
+    NvU32       gspTraceKey       = 0;     /* cmd (76) or hClass (103) */
+    NvBool      bGspTraceDump     = NV_FALSE;
 
     if (pGspTraceHdr->function == 76)        /* GSP_RM_CONTROL */
     {
@@ -432,6 +434,18 @@ _kgspRpcSendMessage
             "GSPTRACE TX func=76 seq=%u len=%u cmd=0x%08x paramsSize=%u hClient=0x%08x hObject=0x%08x\n",
             pGspTraceHdr->sequence, pGspTraceHdr->length,
             p->cmd, p->paramsSize, p->hClient, p->hObject);
+        gspTraceKey     = p->cmd;
+        gspTraceDataLen = p->paramsSize;
+        pGspTraceData   = (const NvU8 *)p->params;
+        switch (p->cmd) {                    /* allowlist: the T2W set */
+            case 0x90f10106:                 /* F1 VASPACE_COPY_SERVER_RESERVED_PDES */
+            case 0x20800a9f:                 /* F2 GMMU_COPY_RESERVED_SPLIT         */
+            case 0x20800a9b:                 /* F3 GMMU_REGISTER_FAULT_BUFFER       */
+            case 0x2080012b:                 /* F4 GPU_PROMOTE_CTX                  */
+            case 0x00801813:                 /* F5 DMA_SET_PAGE_DIRECTORY           */
+                bGspTraceDump = NV_TRUE; break;
+            default: break;
+        }
     }
     else if (pGspTraceHdr->function == 103)  /* GSP_RM_ALLOC */
     {
@@ -440,11 +454,38 @@ _kgspRpcSendMessage
             "GSPTRACE TX func=103 seq=%u len=%u hClass=0x%08x paramsSize=%u hClient=0x%08x hParent=0x%08x\n",
             pGspTraceHdr->sequence, pGspTraceHdr->length,
             p->hClass, p->paramsSize, p->hClient, p->hParent);
+        gspTraceKey     = p->hClass;
+        gspTraceDataLen = p->paramsSize;
+        pGspTraceData   = (const NvU8 *)p->params;
+        /* alloc payloads off by default; set bGspTraceDump = NV_TRUE to include */
     }
     else
     {
         NV_PRINTF(LEVEL_ERROR, "GSPTRACE TX func=%u seq=%u len=%u\n",
             pGspTraceHdr->function, pGspTraceHdr->sequence, pGspTraceHdr->length);
+    }
+
+    if (bGspTraceDump && pGspTraceData != NULL && gspTraceDataLen > 0)
+    {
+        NvU32 gspTraceMax = 512;             /* cap per RPC (bump for big payloads) */
+        NvU32 gspTraceN   = (gspTraceDataLen < gspTraceMax) ? gspTraceDataLen : gspTraceMax;
+        NvU32 gspTraceOff;
+        for (gspTraceOff = 0; gspTraceOff < gspTraceN; gspTraceOff += 32)
+        {
+            char  gspTraceLine[65];
+            NvU32 gspTraceJ;
+            NvU32 gspTraceM = (gspTraceN - gspTraceOff > 32) ? 32 : (gspTraceN - gspTraceOff);
+            static const char gspTraceHex[] = "0123456789abcdef";
+            for (gspTraceJ = 0; gspTraceJ < gspTraceM; gspTraceJ++)
+            {
+                NvU8 b = pGspTraceData[gspTraceOff + gspTraceJ];
+                gspTraceLine[gspTraceJ * 2]     = gspTraceHex[b >> 4];
+                gspTraceLine[gspTraceJ * 2 + 1] = gspTraceHex[b & 0xf];
+            }
+            gspTraceLine[gspTraceM * 2] = '\0';
+            NV_PRINTF(LEVEL_ERROR, "GSPTRACE DUMP seq=%u key=0x%08x off=%u %s\n",
+                      pGspTraceHdr->sequence, gspTraceKey, gspTraceOff, gspTraceLine);
+        }
     }
 }
 
