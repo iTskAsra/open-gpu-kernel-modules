@@ -181,6 +181,17 @@ NvU32 nv_gsp_forge_core_submit(void *pReqBuf, NvU32 reqLen,
     bDryRun = (effFlags & GSP_FORGE_F_DRYRUN) ? NV_TRUE : NV_FALSE;
     pResp->flagsEffective = effFlags;
 
+    // Resolve the GPU up front so the response can always carry its
+    // GSP-internal handles (the client namespace the GSP itself recognises),
+    // and so GSP_FORGE_F_INTERNAL can target them.
+    pGpu = _forgeGetGpu(pReq->gpuInstance);
+    if (pGpu != NULL)
+    {
+        pResp->reserved[0] = pGpu->hInternalClient;
+        pResp->reserved[1] = pGpu->hInternalDevice;
+        pResp->reserved[2] = pGpu->hInternalSubdevice;
+    }
+
     // ---- ENUM_HANDLES has no GPU/RPC dependency -------------------------
     if (pReq->op == GSP_FORGE_OP_ENUM_HANDLES)
     {
@@ -193,12 +204,13 @@ NvU32 nv_gsp_forge_core_submit(void *pReqBuf, NvU32 reqLen,
         if (pRespLen != NULL)
             *pRespLen = (NvU32)sizeof(GspForgeResp) + bytes;
         NV_PRINTF(LEVEL_NOTICE,
-                  "GSPFORGE ENUM: %u resources (%u bytes, cap %u)\n",
-                  count, bytes, respParamCap);
+                  "GSPFORGE ENUM: %u resources (%u bytes, cap %u); "
+                  "internal cli=0x%08x dev=0x%08x sub=0x%08x\n",
+                  count, bytes, respParamCap,
+                  pResp->reserved[0], pResp->reserved[1], pResp->reserved[2]);
         return forgeErrno;
     }
 
-    pGpu = _forgeGetGpu(pReq->gpuInstance);
     if (pGpu == NULL)
     {
         pResp->forgeErrno = GSP_FORGE_E_NOGPU;
@@ -215,6 +227,9 @@ NvU32 nv_gsp_forge_core_submit(void *pReqBuf, NvU32 reqLen,
         {
             NvU32  ps     = pReq->paramsSize;
             void  *pForge = portMemAllocNonPaged(ps ? ps : 1);
+            NvU32  hClientEff = pReq->hClient;
+            NvU32  hParentEff = pReq->hParent;
+            NvU32  hObjEff    = pReq->hObject;
 
             if (pForge == NULL)
             {
@@ -227,12 +242,30 @@ NvU32 nv_gsp_forge_core_submit(void *pReqBuf, NvU32 reqLen,
             if (ps != 0)
                 portMemCopy(pForge, ps, pReqParams, ps);
 
+            // GSP_FORGE_F_INTERNAL: aim at the GPU's GSP-internal handles, the
+            // client namespace the GSP actually recognises on the RPC path.
+            if (effFlags & GSP_FORGE_F_INTERNAL)
+            {
+                hClientEff = pGpu->hInternalClient;
+                if (pReq->op == GSP_FORGE_OP_CONTROL)
+                {
+                    NvU32 klass = pReq->cmd >> 16;
+                    if (klass == 0x2080)      hObjEff = pGpu->hInternalSubdevice;
+                    else if (klass == 0x0080) hObjEff = pGpu->hInternalDevice;
+                    else                      hObjEff = pGpu->hInternalClient;
+                }
+                else /* ALLOC: place the new object under the internal device */
+                {
+                    hParentEff = pGpu->hInternalDevice;
+                }
+            }
+
             NV_PRINTF(LEVEL_NOTICE,
                       "GSPFORGE %s%s hClient=0x%08x hParent=0x%08x hObject=0x%08x "
                       "%s=0x%08x psize=%u\n",
                       (pReq->op == GSP_FORGE_OP_CONTROL) ? "CONTROL" : "ALLOC",
                       bDryRun ? " [DRYRUN]" : "",
-                      pReq->hClient, pReq->hParent, pReq->hObject,
+                      hClientEff, hParentEff, hObjEff,
                       (pReq->op == GSP_FORGE_OP_CONTROL) ? "cmd" : "hClass",
                       pReq->cmd, ps);
 
@@ -250,13 +283,13 @@ NvU32 nv_gsp_forge_core_submit(void *pReqBuf, NvU32 reqLen,
                     status = NV_OK;
                     if (pReq->op == GSP_FORGE_OP_CONTROL)
                     {
-                        NV_RM_RPC_CONTROL(pGpu, pReq->hClient, pReq->hObject,
+                        NV_RM_RPC_CONTROL(pGpu, hClientEff, hObjEff,
                                           pReq->cmd, pForge, ps, status);
                     }
                     else /* GSP_FORGE_OP_ALLOC: hParent=parent, hObject=new, cmd=hClass */
                     {
-                        NV_RM_RPC_ALLOC_OBJECT(pGpu, pReq->hClient, pReq->hParent,
-                                               pReq->hObject, pReq->cmd,
+                        NV_RM_RPC_ALLOC_OBJECT(pGpu, hClientEff, hParentEff,
+                                               hObjEff, pReq->cmd,
                                                pForge, ps, status);
                     }
                     rmapiLockRelease();

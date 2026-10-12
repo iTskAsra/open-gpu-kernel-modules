@@ -44,6 +44,12 @@
 /* ------- request flags --------------------------------------------------- */
 #define GSP_FORGE_F_DRYRUN   (1u << 0) /* build + log the RPC, do NOT send    */
 #define GSP_FORGE_F_NOECHO   (1u << 1) /* do not copy GSP-updated params back */
+#define GSP_FORGE_F_INTERNAL (1u << 2) /* override hClient/hObject with the   */
+                                       /* GPU's GSP-internal handles (the      */
+                                       /* client namespace the GSP itself      */
+                                       /* recognises). CONTROL: object chosen  */
+                                       /* by cmd class; ALLOC: parent =        */
+                                       /* internal device.                     */
 
 /* ------- forge-layer result codes (in resp.forgeErrno; != NV_STATUS) ----- */
 #define GSP_FORGE_E_OK        0u
@@ -89,6 +95,9 @@ typedef struct GspForgeResp
     NvU32 paramsSize;     /* bytes of params[] that follow                   */
     NvU32 durationUs;     /* wall time spent in the RPC                      */
     NvU32 recordCount;    /* ENUM_HANDLES: number of records in params[]     */
+    /* reserved[0..2]: the GPU's GSP-internal handles, filled on every op
+     * when a GPU is present (client, device, subdevice) — the namespace the
+     * GSP recognises, for use with GSP_FORGE_F_INTERNAL.                      */
     NvU32 reserved[6];
     /* NvU8 params[paramsSize] follows:
      *   CONTROL: the (possibly GSP-updated) in/out param struct
